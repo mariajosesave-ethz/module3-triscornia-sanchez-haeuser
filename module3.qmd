@@ -174,7 +174,48 @@ ncp <- project(ncp_window, richness, method = "average")
 names(ncp) <- "ncp"
 plot(ncp)
 ```
+```{r}
+library(terra)
+library(sf)
+library(dplyr)
 
+# Transform country polygons to the NCP CRS
+europe_proj <- terra::vect(
+  sf::st_transform(europe, terra::crs(ncp))
+)
+
+# Convert NA cells to 1 and valid cells to 0
+ncp_na <- terra::ifel(is.na(ncp), 1, 0)
+
+# Count missing cells in each country
+missing_by_country <- terra::extract(
+  ncp_na,
+  europe_proj,
+  fun = sum,
+  na.rm = TRUE
+)
+
+# Add country names and counts
+missing_by_country$country <- europe_proj$name
+names(missing_by_country)[2] <- "missing_cells"
+
+# Join counts to country polygons
+europe_map <- merge(
+  europe_proj,
+  missing_by_country[, c("country", "missing_cells")],
+  by.x = "name",
+  by.y = "country"
+)
+
+# Plot the map, coloured by number of missing cells
+plot(
+  europe_map,
+  "missing_cells",
+  main = "Missing NCP raster cells by country",
+  breaks = c(0, 0.5, 330),
+  col = c("white", "yellow")
+)
+```
 ::: {.callout-note title="Questions"}
 1.  Why `"average"` again? What would `"sum"` do to a *score*, and why would that be wrong here (and right for something like a head count)?
 2.  Where are the holes in the map? Check how many land cells are `NA` and which countries they are in. Is "no data" the same thing as "no NCP"?
