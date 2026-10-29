@@ -177,7 +177,13 @@ plot(ncp)
 
 ::: {.callout-note title="Questions"}
 1.  Why `"average"` again? What would `"sum"` do to a *score*, and why would that be wrong here (and right for something like a head count)?
-2.  Where are the holes in the map? Check how many land cells are `NA` and which countries they are in. Is "no data" the same thing as "no NCP"?
+
+    Averaging gives a representative score for that new pixel instead of adding the scores together and making them artificially larger. For headcount, we would sum them because we care about the total number.
+
+2.  Where are the holes in the map? Check how many land cells are `NA` and which countries they are in. Is "no data" the same thing as "no NCP" (= nature contribution to people)?
+
+    Most of the countries have missing NCP...
+
 3.  We are about to turn missing values into 0. What does that assume about NCP in those cells, and who could be affected?
 :::
 
