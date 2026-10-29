@@ -134,11 +134,12 @@ The COG is at `https://s3.us-west-2.amazonaws.com/us-west-2.opendata.source.coop
 ```{r}
 #| label: carbon-task
 #| eval: false
-carbon_cog <- rast("___", opts = "OVERVIEW_LEVEL=1")
+carbon_cog <- rast("/vsicurl/https://s3.us-west-2.amazonaws.com/us-west-2.opendata.source.coop/cboettig/carbon/v2/cogs/irrecoverable_c_total_2024.tif", opts = "OVERVIEW_LEVEL=1")
 
-carbon_window <- crop(___, ext(___))
-carbon <- project(___, ___, method = ___)
+carbon_window <- crop(carbon_cog, ext(bbox[c("xmin", "xmax", "ymin", "ymax")]))
+carbon <- project(carbon_window, richness, method = "average")
 names(carbon) <- "carbon"
+plot(carbon)
 ```
 
 ::: {.callout-note title="Solution" collapse="true"}
