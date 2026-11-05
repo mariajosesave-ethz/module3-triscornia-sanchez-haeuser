@@ -304,8 +304,8 @@ Stack the three layers into one `grid` (starting from `richness`, so the chunk i
 #| eval: false
 fill0 <- function(x) ifel(is.na(x), 0, x)
 
-grid <- c(richness, ___, ___)
-grid <- mask(grid, ___, touches = ___)
+grid <- c(richness, fill0(carbon), fill0(ncp))
+grid <- mask(grid, europe_proj, touches = FALSE)
 ```
 
 ::: {.callout-note title="Solution" collapse="true"}
