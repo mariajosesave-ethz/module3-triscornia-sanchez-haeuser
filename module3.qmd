@@ -302,6 +302,12 @@ Each layer keeps its own units and legend.
 
 ::: {.callout-note title="Exercise"}
 Before running anything: if you had to pick 30% of Europe, where would you protect? Write down a guess for each layer, then compare with the optimizer below.
+
+Richness layer: Eastern Europe
+
+Carbon layer: Northern Europe, Scandinavia
+
+NCP layer: North/Western Europe.
 :::
 
 ::: {.callout-tip title="Stuck or offline?"}
