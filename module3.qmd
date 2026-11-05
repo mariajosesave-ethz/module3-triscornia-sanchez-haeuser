@@ -196,29 +196,24 @@ missing_by_country <- terra::extract(
   na.rm = TRUE
 )
 
-# Add country names and counts
-missing_by_country$country <- europe_proj$name
-names(missing_by_country)[2] <- "missing_cells"
+# Add missing cell counts directly to country polygons
+europe_proj$missing_cells <- missing_by_country[, 2]
 
-# Define the categories in the correct order
+# Define categories in the correct order
 class_levels <- c("0", "1–300", "301–500", "501–1000", ">1000")
 
-europe_map$missing_class <- cut(
-  europe_map$missing_cells,
+europe_proj$missing_class <- cut(
+  europe_proj$missing_cells,
   breaks = c(-Inf, 0, 300, 500, 1000, Inf),
   labels = class_levels,
   right = TRUE,
   ordered_result = TRUE
 )
 
-# Explicitly enforce the category order
-europe_map$missing_class <- factor(
-  europe_map$missing_class,
-  levels = class_levels,
-  ordered = TRUE
-)
+# Define breaks (each interval has a specific colour)
+breaks <- c(-0.5, 0.5, 300.5, 500.5, 1000.5, Inf)
 
-# Colours in exactly the same order as class_levels
+# Define colours in the same order as the intervals
 cols <- c(
   "white",       # 0
   "#FEE0D2",     # 1–300
@@ -227,20 +222,54 @@ cols <- c(
   "#99000D"      # >1000
 )
 
-total_missing <- terra::global(ncp_na, "sum", na.rm = TRUE)
+# Define breaks
+breaks <- c(-0.5, 0.5, 300.5, 500.5, 1000.5, Inf)
 
-print(total_missing)
-
-# Plot
-plot(
-  europe_map,
-  "missing_class",
-  col = cols,
-  main = "Missing NCP raster cells by country",
-  plg = list(title = "Number of missing cells")
+# Define colours
+cols <- c(
+  "white",       # 0
+  "#FEE0D2",     # 1–300
+  "#FC9272",     # 301–500
+  "#EF3B2C",     # 501–1000
+  "#99000D"      # >1000
 )
 
+# Assign a colour to each country
+class_id <- cut(
+  europe_proj$missing_cells,
+  breaks = breaks,
+  labels = FALSE
+)
 
+country_cols <- cols[class_id]
+
+# Create space for map and legend side by side
+layout(matrix(c(1, 2), nrow = 1), widths = c(4, 1))
+
+# Plot map WITHOUT automatic legend
+par(mar = c(4, 4, 4, 1))
+
+plot(
+  europe_proj,
+  col = country_cols,
+  main = "Missing NCP raster cells by country"
+)
+
+# Plot custom legend in separate panel
+par(mar = c(0, 0, 0, 0))
+plot.new()
+
+legend(
+  "center",
+  legend = c("0", "1–300", "301–500", "501–1000", ">1000"),
+  fill = cols,
+  title = "Number of missing cells",
+  cex = 1,
+  bty = "n"
+)
+
+# Reset layout
+layout(1)
 ```
 
 ::: {.callout-note title="Questions"}
@@ -302,7 +331,17 @@ Each layer keeps its own units and legend.
 
 ::: {.callout-note title="Exercise"}
 Before running anything: if you had to pick 30% of Europe, where would you protect? Write down a guess for each layer, then compare with the optimizer below.
+<<<<<<< HEAD
 ::: 
+=======
+
+Richness layer: Eastern Europe
+
+Carbon layer: Northern Europe, Scandinavia
+
+NCP layer: North/Western Europe.
+:::
+>>>>>>> 14bf87db001ef0598ed005c99a65d7d02439ca1e
 
 ::: {.callout-tip title="Stuck or offline?"}
 `grid <- rast("cache/europe_grid.tif")` loads a finished copy (you will also need `europe_proj` and `richness` from the richness step).
@@ -356,7 +395,7 @@ carbon_01 <- stretch(grid[["carbon"]], minv = 0, maxv = 1)
 p_carbon <- problem(uniform_cost, features = carbon_01) |>      # cells to choose from + what to protect
   add_max_wtd_sum_objective(budget = budget_cells) |>   # maximise the summed feature value, within the budget
   add_binary_decisions() |>                             # each cell is protected (1) or not (0), never partly
-  add_default_solver(gap = 0, verbose = FALSE)          # gap = 0: demand the exact best answer, not "within 10%"
+  add_highs_solver(gap = 0, verbose = FALSE)          # gap = 0: demand the exact best answer, not "within 10%"
 
 # SOLVE
 # force = TRUE: prioritizr flags single-feature problems as a likely mistake, and we want one here
