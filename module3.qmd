@@ -275,8 +275,8 @@ Stack the three layers into one `grid` (starting from `richness`, so the chunk i
 #| eval: false
 fill0 <- function(x) ifel(is.na(x), 0, x)
 
-grid <- c(richness, ___, ___)
-grid <- mask(grid, ___, touches = ___)
+grid <- c(richness, fill0(carbon), fill0(ncp))
+grid <- mask(grid, europe_proj, touches = FALSE)
 ```
 
 ::: {.callout-note title="Solution" collapse="true"}
@@ -302,7 +302,7 @@ Each layer keeps its own units and legend.
 
 ::: {.callout-note title="Exercise"}
 Before running anything: if you had to pick 30% of Europe, where would you protect? Write down a guess for each layer, then compare with the optimizer below.
-:::
+::: 
 
 ::: {.callout-tip title="Stuck or offline?"}
 `grid <- rast("cache/europe_grid.tif")` loads a finished copy (you will also need `europe_proj` and `richness` from the richness step).
@@ -364,6 +364,7 @@ sol_carbon <- solve(p_carbon, force = TRUE)
 
 # The answer is a raster of 1s (protected) and 0s (not)
 plot(sol_carbon, col = c("grey90", "darkgreen"), main = "Carbon alone, 30% of the land")
+grid <- rast("cache/europe_grid.tif")
 ```
 
 Two things to check. How many cells did it protect (`global(sol_carbon, "sum", na.rm = TRUE)`), and is that 30% of the land cells? Then look at the map: does it match where the carbon layer is high?
