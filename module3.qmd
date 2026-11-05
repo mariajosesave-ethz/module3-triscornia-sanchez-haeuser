@@ -385,7 +385,7 @@ carbon_01 <- stretch(grid[["carbon"]], minv = 0, maxv = 1)
 p_carbon <- problem(uniform_cost, features = carbon_01) |>      # cells to choose from + what to protect
   add_max_wtd_sum_objective(budget = budget_cells) |>   # maximise the summed feature value, within the budget
   add_binary_decisions() |>                             # each cell is protected (1) or not (0), never partly
-  add_default_solver(gap = 0, verbose = FALSE)          # gap = 0: demand the exact best answer, not "within 10%"
+  add_highs_solver(gap = 0, verbose = FALSE)          # gap = 0: demand the exact best answer, not "within 10%"
 
 # SOLVE
 # force = TRUE: prioritizr flags single-feature problems as a likely mistake, and we want one here
