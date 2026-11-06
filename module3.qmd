@@ -296,7 +296,13 @@ layout(1)
 ::: {.callout-note title="Your task"}
 Stack the three layers into one `grid` (starting from `richness`, so the chunk is safe to re-run), fill the missing values, then use `mask()` with the European polygon (`europe_proj`) to set everything outside to `NA`. Plot `grid` and count the cells that remain with `global(grid[["richness"]], "notNA")`.
 
-*Think:* why mask *after* filling the zeros rather than before? And `mask()` has a `touches` argument: which setting do you want for a coastline?
+*Think:* why mask *after* filling the zeros rather than before?
+
+To avoid removing cells that should represent 0 values.
+
+And `mask()` has a `touches` argument: which setting do you want for a coastline?
+
+FALSE to avoid including cells that have some areas that are actually ocean.\
 :::
 
 ```{r}
