@@ -337,9 +337,8 @@ Each layer keeps its own units and legend.
 
 ::: {.callout-note title="Exercise"}
 Before running anything: if you had to pick 30% of Europe, where would you protect? Write down a guess for each layer, then compare with the optimizer below.
-<<<<<<< HEAD
+
 ::: 
-=======
 
 Richness layer: Eastern Europe
 
@@ -347,7 +346,6 @@ Carbon layer: Northern Europe, Scandinavia
 
 NCP layer: North/Western Europe.
 :::
->>>>>>> 14bf87db001ef0598ed005c99a65d7d02439ca1e
 
 ::: {.callout-tip title="Stuck or offline?"}
 `grid <- rast("cache/europe_grid.tif")` loads a finished copy (you will also need `europe_proj` and `richness` from the richness step).
