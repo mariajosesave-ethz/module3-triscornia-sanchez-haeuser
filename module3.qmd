@@ -444,13 +444,36 @@ What stayed the same is the general way to define the problem, the objective fun
 
 Now imagine you also want NCP, a 10% budget, unequal weights, and a plan that locks in existing protected areas, and you want to compare a dozen of these.
 
-1.  What are the things that vary between plans? Those are the arguments.What us changing is the weights (different values). 
-2.  What stays the same? That is the body. What stays the same is the budget, the specific layers, the lock-in exisitng protected areas, and solving the optimization. 
-3.  What would go wrong if you kept copying and pasting (and fixed a bug in only one copy)? If the is an error it would be pasted to all the next copies, makes it harder to keep it uniform. 
+1.  What are the things that vary between plans? Those are the arguments.What us changing is the weights and layers (different values).
+2.  What stays the same? That is the body. What stays the same is the budget, the lock-in exisitng protected areas, and solving the optimization.
+3.  What would go wrong if you kept copying and pasting (and fixed a bug in only one copy)? If the is an error it would be pasted to all the next copies, makes it harder to keep it uniform.
 
-Sketch the function you would write before you read ours below.
+Sketch the function you would write before you read ours below.\
+\
+Budget would be 0.1 (new budget) and locked_in = existing areas to lock in protected areas.
 
-
+```         
+make_plan <- function(richness = 0, carbon = 0, ncp = 0, budget = 0.1, locked_in = existing_pa) {
+  # 1. Filter to only active feature weights (> 0)
+  weights <- c(richness = richness, carbon = carbon, ncp = ncp)
+  weights <- weights[weights > 0]
+  
+  # 2. Extract and rescale active layers to 0-1
+  features <- stretch(grid[[names(weights)]], minv = 0, maxv = 1)
+  
+  # 3. Build the prioritizr problem
+  p <- problem(uniform_cost, features = features) |>
+    add_max_wtd_sum_objective(budget = budget * global(uniform_cost, "sum", na.rm = TRUE)[[1]]) |>
+    add_feature_weights(unname(weights)) |>
+    add_binary_decisions() |>
+    add_default_solver(gap = 0, verbose = FALSE)
+  
+  # 4. Add locked-in areas if provided, then solve
+  if (!is.null(locked_in)) p <- add_locked_in_constraints(p, locked_in)
+  
+  solve(p, force = TRUE)
+}
+```
 :::
 
 ## Wrapping the steps in a function
@@ -459,7 +482,10 @@ One answer: the layers and weights are the arguments, the budget and cost have d
 
 ```{r}
 #| label: make-plan
-# Weights say how much each layer counts; layers are rescaled to 0-1; the budget is a share of total cost.
+# Weights say how much each layer counts; layers are rescaled to 0-1; the budget is a share of total cost. 
+
+#QUESTION?  shouldnt budget be 0.1 and locked_in NOT null?
+
 make_problem <- function(richness = 0, carbon = 0, ncp = 0, population = 0,
                          budget = 0.3, cost = uniform_cost, locked_in = NULL) {
   weights <- c(richness = richness, carbon = carbon, ncp = ncp, population = population)
@@ -517,7 +543,12 @@ plans |>
   theme_void()
 ```
 
-Switzerland is outlined in red. Compare Plans 1 to 3: where do they agree, and where do they pull apart?
+Switzerland is outlined in red. Compare Plans 1 to 3: where do they agree, and where do they pull apart?\
+1. almost no protected areas in CH
+
+2.  some protected areas
+3.  almost all is protected
+4.  almost all is protected. It seems to match more with the NCP map even though the layers are weighted equally.
 
 ## What does each plan hold?
 
