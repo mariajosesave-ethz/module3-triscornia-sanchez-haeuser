@@ -590,8 +590,14 @@ summary_table |> mutate(across(-plan, ~ round(.x, 2)))
 3.  Change `budget` to 0.1 and 0.5. Is the gain from protecting more land steady or does it flatten out?
 # The gain is not completely steady and shows some flattening out. Increasing the protected area from 10% to 30% gives substantial gains for all three objectives, while increasing it further to 50% still improves the results but generally by a smaller amount relative to the additional land protected. This suggests diminishing returns, as the highest-value areas are selected first.
 4.  Swap `data/Amphibians_RWR_2025.tif` in as the richness layer (same grid, same crop and mask code). It upweights small-range species. How do Plans 1 and 4 change?
+# Using the Amphibian RWR layer changes Plan 1 substantially. Protection becomes concentrated in southern and southeastern Europe, particularly around the Mediterranean region, where many range-restricted amphibian species occur. Plan 4 also shifts towards these areas, but the change is smaller because carbon and NCP are still included in the optimization. Overall, the plans become more focused on biodiversity hotspots rather than areas with high overall species richness.
 5.  Invent a planning group (a national park agency, the farmers' union, a tourism board). Choose its weights, write one sentence on why, run `make_plan()`, and add it to the table.
+# A tourism board would prioritize areas with high nature contributions to people (NCP), as these provide recreational, cultural, and ecosystem service benefits that attract visitors.
+# Planning group: Tourism Board
+# Weights: richness = 1, carbon = 1, ncp = 3
+# Justification: A tourism board would prioritize areas with high nature contributions to people (NCP), as these provide recreational, cultural, and ecosystem service benefits that attract visitors.
 6.  Compare rescaling choices for the all-three plan: (a) raw values, (b) 0-1 as above, (c) each layer divided by its Europe-wide total. Build each version of `features` yourself, solve, and compare the share of each layer held and how many cells differ. Which layer wins under each? Which would you defend to a planning group, and why?
+# The rescaling method had a strong influence on the results. Using raw values, carbon dominated the solution, with 72% of total carbon protected, while richness was poorly represented (20%). Using 0-1 scaling, the plan was more balanced, protecting 36% of richness, 52% of carbon, and 56% of NCP. Using Europe-total scaling, richness became dominant, with 68% of total richness protected. The plans also differed substantially, with more than 11,000 cells changing between approaches. I would defend 0-1 scaling because it puts all layers on a comparable scale and prevents any objective from dominating simply because of its units or numerical range.
 :::
 
 ## 1.
@@ -668,6 +674,74 @@ plot(plans[["1. richness"]],
 plot(plans[["4. all three"]],
      col = c("grey90", "darkgreen"),
      main = "Plan 4 - Amphibian RWR")
+##5.
+tourism_plan <- make_plan(
+  richness = 1,
+  carbon = 1,
+  ncp = 3
+)
+
+plans[["5. Tourism Board"]] <- tourism_plan
+##6.
+features_raw <- grid[[c("richness", "carbon", "ncp")]]
+
+p_raw <- problem(uniform_cost, features = features_raw) |>
+  add_max_wtd_sum_objective(budget = budget_cells) |>
+  add_binary_decisions() |>
+  add_default_solver(gap = 0, verbose = FALSE)
+
+sol_raw <- solve(p_raw)
+
+sol_01 <- plans[["4. all three"]]
+
+richness_total <- grid[["richness"]] /
+  global(grid[["richness"]], "sum", na.rm = TRUE)[[1]]
+
+carbon_total <- grid[["carbon"]] /
+  global(grid[["carbon"]], "sum", na.rm = TRUE)[[1]]
+
+ncp_total <- grid[["ncp"]] /
+  global(grid[["ncp"]], "sum", na.rm = TRUE)[[1]]
+
+features_total <- c(richness_total, carbon_total, ncp_total)
+names(features_total) <- c("richness", "carbon", "ncp")
+
+p_total <- problem(uniform_cost, features = features_total) |>
+  add_max_wtd_sum_objective(budget = budget_cells) |>
+  add_binary_decisions() |>
+  add_default_solver(gap = 0, verbose = FALSE)
+
+sol_total <- solve(p_total)
+
+comparison <- tibble::tibble(
+  plan = c("Raw values", "0-1 scaling", "Europe total scaling"),
+
+  richness = c(
+    share_held(sol_raw, "richness"),
+    share_held(sol_01, "richness"),
+    share_held(sol_total, "richness")
+  ),
+
+  carbon = c(
+    share_held(sol_raw, "carbon"),
+    share_held(sol_01, "carbon"),
+    share_held(sol_total, "carbon")
+  ),
+
+  ncp = c(
+    share_held(sol_raw, "ncp"),
+    share_held(sol_01, "ncp"),
+    share_held(sol_total, "ncp")
+  )
+)
+
+comparison
+
+global(abs(sol_raw - sol_01), "sum", na.rm = TRUE)[[1]]
+
+global(abs(sol_total - sol_01), "sum", na.rm = TRUE)[[1]]
+
+global(abs(sol_raw - sol_total), "sum", na.rm = TRUE)[[1]]
 
 # Exercise: how many people?
 
