@@ -861,20 +861,34 @@ global(abs(sol_raw - sol_total), "sum", na.rm = TRUE)\[\[1\]\]
 
 # Exercise: how many people?
 
-We left people out of the objective on purpose: we protected for nature first, and now we count who ends up inside. Population is the fourth layer.
+We left people out of the objective on purpose: we protected for nature
+first, and now we count who ends up inside. Population is the fourth
+layer.
 
-Population (GHS-POP 2020, JRC) is a global COG at about 90 m: `population/raw/ghs-pop-2020-cog.tif` in the same Source Cooperative folder. It is 11.6 GB, so the lazy, windowed read matters even more than it did for carbon.
+Population (GHS-POP 2020, JRC) is a global COG at about 90 m:
+`population/raw/ghs-pop-2020-cog.tif` in the same Source Cooperative
+folder. It is 11.6 GB, so the lazy, windowed read matters even more than
+it did for carbon.
 
 ::: {.callout-note title="Your task"}
-Read population for Europe, put it on `grid`, and work out how many people live inside the protected cells of each of the four plans.
+Read population for Europe, put it on `grid`, and work out how many
+people live inside the protected cells of each of the four plans.
 
 *Hints:*
 
-- It is the carbon recipe again: open lazily, crop, `project()` onto the richness grid. Use an overview (`OVERVIEW_LEVEL=3` is 16 times coarser, about 1.5 km) so you do not read all 90 m pixels.
-- Population is a **count**, not a score. Which `method` adds people up as cells get bigger?
-- **A trap:** each overview pixel holds the *average* of the pixels it covers, not their total. Summing overview pixels therefore undercounts people by the number of pixels averaged (here 16 x 16). Check your answer: the countries in `grid` hold about 570 million people.
-- Keep population in **thousands** of people so the numbers stay readable.
-- Missing population is 0 on land and `NA` outside, exactly as before. Re-use `fill0()` and `mask()`.
+- It is the carbon recipe again: open lazily, crop, `project()` onto the
+  richness grid. Use an overview (`OVERVIEW_LEVEL=3` is 16 times
+  coarser, about 1.5 km) so you do not read all 90 m pixels.
+- Population is a **count**, not a score. Which `method` adds people up
+  as cells get bigger?
+- **A trap:** each overview pixel holds the *average* of the pixels it
+  covers, not their total. Summing overview pixels therefore undercounts
+  people by the number of pixels averaged (here 16 x 16). Check your
+  answer: the countries in `grid` hold about 570 million people.
+- Keep population in **thousands** of people so the numbers stay
+  readable.
+- Missing population is 0 on land and `NA` outside, exactly as before.
+  Re-use `fill0()` and `mask()`.
 :::
 
 ```{r}
@@ -939,24 +953,44 @@ sapply(plans, \(sol) global(sol * grid[["population"]], "sum", na.rm = TRUE)[[1]
 ```
 :::
 
-total_pop \<- global(grid\[\["population"\]\], "sum", na.rm = TRUE)\[\[1\]\]
+total_pop \<- global(grid\[\["population"\]\], "sum", na.rm =
+TRUE)\[\[1\]\]
 
-pop_table \<- tibble::tibble( plan = names(plans), people_millions = sapply(plans, (sol) global(sol \* grid\[\["population"\]\], "sum", na.rm = TRUE)\[\[1\]\]) / 1000, share_of_people = people_millions \* 1000 / total_pop )
+pop_table \<- tibble::tibble( plan = names(plans), people_millions =
+sapply(plans, (sol) global(sol \* grid\[\["population"\]\], "sum", na.rm
+= TRUE)\[\[1\]\]) / 1000, share_of_people = people_millions \* 1000 /
+total_pop )
 
 pop_table \|\> mutate(across(-plan, \~ round(.x, 2)))
 
 ::: {.callout-note title="Questions"}
-1.  Which plan has the most people inside it, and which the fewest? Population was never an objective, so is this a coincidence?
+1.  Which plan has the most people inside it, and which the fewest?
+    Population was never an objective, so is this a coincidence?
 
-The NCP plan has the most people inside and the carbon plan the fewest This is not a coincidence: the NCP layer is built around benefits to people, so it is high where people live, while carbon is concentrated in more remote areas with less people.
+The NCP plan has the most people inside and the carbon plan the fewest
+This is not a coincidence: the NCP layer is built around benefits to
+people, so it is high where people live, while carbon is concentrated in
+more remote areas with less people.
 
-1.  What share of Europe's population is that, compared with the 30% of land? Who might welcome that, and who might object?
+1.  What share of Europe's population is that, compared with the 30% of
+    land? Who might welcome that, and who might object?
 
-Richness protects about as many people as its land share (29% vs 30%). Carbon protects far fewer (17%), while NCP (45%) and the all-three plan (39%) protect more. NCP-heavy plans might be more welcome where there are residents who gain access to nature and the associated nature services, and conservation advocates. Those who might object: farmers, landowners and municipalities in densely used areas, who face the most land-use restrictions. Carbon-focused plans affect fewer people but protect land where few people benefit from nature.
+Richness protects about as many people as its land share (29% vs 30%).
+Carbon protects far fewer (17%), while NCP (45%) and the all-three plan
+(39%) protect more. NCP-heavy plans might be more welcome where there
+are residents who gain access to nature and the associated nature
+services, and conservation advocates. Those who might object: farmers,
+landowners and municipalities in densely used areas, who face the most
+land-use restrictions. Carbon-focused plans affect fewer people but
+protect land where few people benefit from nature.
 
-1.  Run `make_plan(richness = 1, carbon = 1, ncp = 1, population = 1)` (population as a fourth objective). How far does the map move, and what happens to the other three shares?
+1.  Run `make_plan(richness = 1, carbon = 1, ncp = 1, population = 1)`
+    (population as a fourth objective). How far does the map move, and
+    what happens to the other three shares?
 
-Adding population changes very little on the map (only 454/58,000 are different). But the share of Europe’s people inside the protected area goes up from 39% to 50%. The other three shares stay almost the same.
+Adding population changes very little on the map (only 454/58,000 are
+different). But the share of Europe’s people inside the protected area
+goes up from 39% to 50%. The other three shares stay almost the same.
 
 ```{r}
 plan_pop <- make_plan(richness = 1, carbon = 1, ncp = 1, population = 1)
@@ -1098,23 +1132,14 @@ territories).
 
 The three inputs layered that we used are already reflecting particular
 priorities about what is worth protecting. Then, the fact that we are
-
 sorting them in a binary way (0 or 1), means that each grid cell could
-
 either be fully selected for protection or excluded, with no
-
 intermediate option. The 10km grid is a pretty large scale and can
-
 overlook smaller habitats or local differences. Assigning equal weights
-
 to the tree layers assumes that they all have the same importance.
-
 Furthermore, replacing missing values with 0 assumes that areas without
-
 data have no conservation value. Finally, using national borders as the
-
 unit for reporting conservation burdens privilege countries as the
-
 relevant unit of responsibility.
 :::
 
