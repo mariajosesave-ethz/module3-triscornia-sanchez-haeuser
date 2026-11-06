@@ -533,12 +533,92 @@ summary_table |> mutate(across(-plan, ~ round(.x, 2)))
 
 ::: {.callout-note title="Tasks"}
 1.  Look at Plan 4, which gives every layer the same weight. Does it hold about the same share of richness, carbon and NCP? Why not? (*Hint:* compare how the three layers are distributed; the plots above are a start, and so is the note on rescaling.) Which layer is a 30% budget most and least efficient for?
+# Plan 4 does not protect the same share of all three objectives. With 30% of the land, it captures 32% of richness, 48% of carbon, and 55% of NCP. This is because the three layers are distributed differently across Europe, so equal weights do not lead to equal outcomes.
+
+# NCP is the most efficiently protected, as 30% of land captures 58% of total NCP. Richness is the least efficiently protected, as 30% of land captures only 36% of total richness. This suggests that NCP is more spatially concentrated, while richness is more widely distributed.
 2.  In Plan 4, change the weights (try `richness = 3`, then `ncp = 3`). Which layer moves the map most? Was that what you expected?
+# Increasing the weight of richness and NCP both changed the selected areas, but increasing NCP had the larger effect on the map. The NCP-weighted plan shifted protection more strongly towards western and southern Europe, while the richness-weighted plan remained more similar to the original plan. This was expected because NCP appears to be more spatially concentrated, so increasing its weight has a stronger influence on the optimization results.
 3.  Change `budget` to 0.1 and 0.5. Is the gain from protecting more land steady or does it flatten out?
+# The gain is not completely steady and shows some flattening out. Increasing the protected area from 10% to 30% gives substantial gains for all three objectives, while increasing it further to 50% still improves the results but generally by a smaller amount relative to the additional land protected. This suggests diminishing returns, as the highest-value areas are selected first.
 4.  Swap `data/Amphibians_RWR_2025.tif` in as the richness layer (same grid, same crop and mask code). It upweights small-range species. How do Plans 1 and 4 change?
 5.  Invent a planning group (a national park agency, the farmers' union, a tourism board). Choose its weights, write one sentence on why, run `make_plan()`, and add it to the table.
 6.  Compare rescaling choices for the all-three plan: (a) raw values, (b) 0-1 as above, (c) each layer divided by its Europe-wide total. Build each version of `features` yourself, solve, and compare the share of each layer held and how many cells differ. Which layer wins under each? Which would you defend to a planning group, and why?
 :::
+
+## 1.
+summary_table |>
+  mutate(across(-plan, round, 2))
+##2.
+plan_rich3 <- make_plan(richness = 3, carbon = 1, ncp = 1)
+
+plan_ncp3 <- make_plan(richness = 1, carbon = 1, ncp = 3)
+
+plot(plan_rich3,
+     col = c("grey90", "darkgreen"),
+     main = "Richness = 3")
+     
+plot(plan_ncp3,
+     col = c("grey90", "darkgreen"),
+     main = "NCP = 3")
+##3.  
+plan_10 <- make_plan(
+  richness = 1,
+  carbon = 1,
+  ncp = 1,
+  budget = 0.1
+)
+
+plan_50 <- make_plan(
+  richness = 1,
+  carbon = 1,
+  ncp = 1,
+  budget = 0.5
+)
+
+share_held(plan_10, "richness")
+share_held(plan_10, "carbon")
+share_held(plan_10, "ncp")
+
+share_held(plan_50, "richness")
+share_held(plan_50, "carbon")
+share_held(plan_50, "ncp")
+##4.
+richness_global <- rast("data/Amphibians_RWR_2025.tif")
+
+europe_proj <- europe |>
+  st_transform(crs(richness_global)) |>
+  vect()
+
+richness <- crop(richness_global, europe_proj)
+names(richness) <- "richness"
+
+carbon_window <- crop(carbon_cog, ext(bbox[c("xmin", "xmax", "ymin", "ymax")]))
+carbon <- project(carbon_window, richness, method = "average")
+names(carbon) <- "carbon"
+
+ncp_window <- crop(ncp_cog, ext(bbox[c("xmin", "xmax", "ymin", "ymax")]))
+ncp <- project(ncp_window, richness, method = "average")
+names(ncp) <- "ncp"
+
+fill0 <- function(x) ifel(is.na(x), 0, x)
+
+grid <- c(richness, fill0(carbon), fill0(ncp))
+grid <- mask(grid, europe_proj, touches = FALSE)
+
+plans <- list(
+  "1. richness"  = make_plan(richness = 1),
+  "2. carbon"    = make_plan(carbon = 1),
+  "3. NCP"       = make_plan(ncp = 1),
+  "4. all three" = make_plan(richness = 1, carbon = 1, ncp = 1)
+)
+
+plot(plans[["1. richness"]],
+     col = c("grey90", "darkgreen"),
+     main = "Plan 1 - Amphibian RWR")
+
+plot(plans[["4. all three"]],
+     col = c("grey90", "darkgreen"),
+     main = "Plan 4 - Amphibian RWR")
 
 # Exercise: how many people?
 
