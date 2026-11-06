@@ -794,6 +794,7 @@ Conservation targets are national commitments, but the optimizer above only sees
 Build a raster `country` on `grid` in which each cell holds the ID of the country it is in (`rasterize()` on the polygon, `field = "id"`), then write a function `country_burden(sol)` that returns, per country, the number of land cells, the number protected, and the **share of the country's land** that is protected.
 
 Run it for Plan 4. Which countries carry the most protected land, in absolute terms and as a share of their own territory? Where is Switzerland?
+# In absolute terms, Germany, France, the United Kingdom and Poland contain the most protected land because they are among the largest countries in the study area. As a share of territory, San Marino and Liechtenstein rank highest, although they consist of only one cell. Among larger countries, Ireland, the Netherlands, Germany and Switzerland have the highest protected shares. Switzerland ranks highly, with about 84% of its land included in the plan.
 :::
 
 ::: {.callout-note title="Solution" collapse="true"}
@@ -818,11 +819,47 @@ country_burden(plans[["4. all three"]]) |>
   mutate(share = round(share, 2))
 ```
 :::
+# adapted code
 
+country_burden(plans[["4. all three"]]) |>
+  arrange(desc(share)) |>
+  mutate(share = round(share, 3))
+  
+country_burden(plans[["4. all three"]]) |>
+  arrange(desc(protected))
+
+burden4 <- country_burden(plans[["4. all three"]])
+
+burden4$share <- burden4$protected / burden4$cells
+
+burden4 |>
+  arrange(desc(share))
+  
 ::: {.callout-note title="Questions"}
 1.  Plot the protected share by country for Plan 4. Is any country far above or below 30%? What is it about the layers that makes this happen?
+# Yes, several countries are far above or below 30%. For example, Ireland (90.8%), the Netherlands (89.7%), Germany (86.2%) and Switzerland (84.1%) have much higher protected shares. This happens because the optimizer selects areas with high richness, carbon and NCP values, which are not evenly distributed across Europe.
 2.  Do the four plans give the same ranking of countries? Which plan is most unequal?
+# No, the rankings differ across plans because richness, carbon and NCP are concentrated in different parts of Europe. The single-objective plans are generally more unequal, while the all-three plan spreads protection more evenly across countries.
 3.  A cell is assigned by its centre. What does that do to small countries and to Switzerland's border?
+# Because cells are assigned according to their centre point, small countries may be represented by very few cells, making their protected share sensitive to small changes. Border cells can also be assigned to neighbouring countries if their centre lies outside the country's boundary, which may slightly affect results for countries such as Switzerland.
+
+## Code
+#1.
+
+europe_proj$share_pct <- burden4$share * 100
+
+plot(
+  europe_proj,
+  "share_pct",
+  main = "Protected % by country (Plan 4)"
+)
+#2.
+
+country_burden(plans[["1. richness"]]) |> arrange(desc(share))
+country_burden(plans[["2. carbon"]]) |> arrange(desc(share))
+country_burden(plans[["3. NCP"]]) |> arrange(desc(share))
+country_burden(plans[["4. all three"]]) |> arrange(desc(share))
+
 :::
 
 # Exercise: is the optimizer neutral?
