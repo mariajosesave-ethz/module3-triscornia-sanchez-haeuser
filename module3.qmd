@@ -861,35 +861,60 @@ global(abs(sol_raw - sol_total), "sum", na.rm = TRUE)\[\[1\]\]
 
 # Exercise: how many people?
 
-We left people out of the objective on purpose: we protected for nature
-first, and now we count who ends up inside. Population is the fourth
-layer.
+We left people out of the objective on purpose: we protected for nature first, and now we count who ends up inside. Population is the fourth layer.
 
-Population (GHS-POP 2020, JRC) is a global COG at about 90 m:
-`population/raw/ghs-pop-2020-cog.tif` in the same Source Cooperative
-folder. It is 11.6 GB, so the lazy, windowed read matters even more than
-it did for carbon.
+Population (GHS-POP 2020, JRC) is a global COG at about 90 m: `population/raw/ghs-pop-2020-cog.tif` in the same Source Cooperative folder. It is 11.6 GB, so the lazy, windowed read matters even more than it did for carbon.
 
 ::: {.callout-note title="Your task"}
-Read population for Europe, put it on `grid`, and work out how many
-people live inside the protected cells of each of the four plans.
+Read population for Europe, put it on `grid`, and work out how many people live inside the protected cells of each of the four plans.
 
 *Hints:*
 
-- It is the carbon recipe again: open lazily, crop, `project()` onto the
-  richness grid. Use an overview (`OVERVIEW_LEVEL=3` is 16 times
-  coarser, about 1.5 km) so you do not read all 90 m pixels.
-- Population is a **count**, not a score. Which `method` adds people up
-  as cells get bigger?
-- **A trap:** each overview pixel holds the *average* of the pixels it
-  covers, not their total. Summing overview pixels therefore undercounts
-  people by the number of pixels averaged (here 16 x 16). Check your
-  answer: the countries in `grid` hold about 570 million people.
-- Keep population in **thousands** of people so the numbers stay
-  readable.
-- Missing population is 0 on land and `NA` outside, exactly as before.
-  Re-use `fill0()` and `mask()`.
+- It is the carbon recipe again: open lazily, crop, `project()` onto the richness grid. Use an overview (`OVERVIEW_LEVEL=3` is 16 times coarser, about 1.5 km) so you do not read all 90 m pixels.
+- Population is a **count**, not a score. Which `method` adds people up as cells get bigger?
+- **A trap:** each overview pixel holds the *average* of the pixels it covers, not their total. Summing overview pixels therefore undercounts people by the number of pixels averaged (here 16 x 16). Check your answer: the countries in `grid` hold about 570 million people.
+- Keep population in **thousands** of people so the numbers stay readable.
+- Missing population is 0 on land and `NA` outside, exactly as before. Re-use `fill0()` and `mask()`.
 :::
+
+```{r}
+#| label: population-solution
+# Source Cooperative serves the same file at two addresses; use whichever is faster for you
+population_cog <- rast("/vsicurl/https://s3.us-west-2.amazonaws.com/us-west-2.opendata.source.coop/cboettig/population/raw/ghs-pop-2020-cog.tif",
+                   opts = "OVERVIEW_LEVEL=3")
+
+population_window <- crop(population_cog, ext(bbox[c("xmin", "xmax", "ymin", "ymax")]))
+population <- project(population_window, richness, method = "sum") *16*16/1000
+names(population) <- "population"
+
+
+grid <- c(grid[[c("richness", "carbon", "ncp")]], mask(fill0(population), grid[["richness"]]))
+
+#Total population on grid
+global(grid[["population"]], "sum", na.rm = TRUE)[[1]] / 1000
+
+# Total population on the grid (millions)
+total_pop <- global(grid[["population"]], "sum", na.rm = TRUE)[[1]] / 1000
+
+
+```
+
+```{r}
+# Total population on the grid (millions)
+total_pop <- global(grid[["population"]], "sum", na.rm = TRUE)[[1]]
+
+#people per plan (millions)
+people_m <- sapply(plans, \(sol) global(sol * grid[["population"]], "sum", na.rm = TRUE)[[1]]) / 1000
+
+people_m
+
+```
+
+```{r}
+# % of Europe's population per plan
+pct_people <- 100 * people_m * 1000 / total_pop
+round(pct_people, 1)
+```
 
 ::: {.callout-note title="Solution" collapse="true"}
 ```{r}
@@ -914,14 +939,54 @@ sapply(plans, \(sol) global(sol * grid[["population"]], "sum", na.rm = TRUE)[[1]
 ```
 :::
 
+total_pop \<- global(grid\[\["population"\]\], "sum", na.rm = TRUE)\[\[1\]\]
+
+pop_table \<- tibble::tibble( plan = names(plans), people_millions = sapply(plans, (sol) global(sol \* grid\[\["population"\]\], "sum", na.rm = TRUE)\[\[1\]\]) / 1000, share_of_people = people_millions \* 1000 / total_pop )
+
+pop_table \|\> mutate(across(-plan, \~ round(.x, 2)))
+
 ::: {.callout-note title="Questions"}
-1.  Which plan has the most people inside it, and which the fewest?
-    Population was never an objective, so is this a coincidence?
-2.  What share of Europe's population is that, compared with the 30% of
-    land? Who might welcome that, and who might object?
-3.  Run `make_plan(richness = 1, carbon = 1, ncp = 1, population = 1)`
-    (population as a fourth objective). How far does the map move, and
-    what happens to the other three shares?
+1.  Which plan has the most people inside it, and which the fewest? Population was never an objective, so is this a coincidence?
+
+The NCP plan has the most people inside and the carbon plan the fewest This is not a coincidence: the NCP layer is built around benefits to people, so it is high where people live, while carbon is concentrated in more remote areas with less people.
+
+1.  What share of Europe's population is that, compared with the 30% of land? Who might welcome that, and who might object?
+
+Richness protects about as many people as its land share (29% vs 30%). Carbon protects far fewer (17%), while NCP (45%) and the all-three plan (39%) protect more. NCP-heavy plans might be more welcome where there are residents who gain access to nature and the associated nature services, and conservation advocates. Those who might object: farmers, landowners and municipalities in densely used areas, who face the most land-use restrictions. Carbon-focused plans affect fewer people but protect land where few people benefit from nature.
+
+1.  Run `make_plan(richness = 1, carbon = 1, ncp = 1, population = 1)` (population as a fourth objective). How far does the map move, and what happens to the other three shares?
+
+Adding population changes very little on the map (only 454/58,000 are different). But the share of Europe’s people inside the protected area goes up from 39% to 50%. The other three shares stay almost the same.
+
+```{r}
+plan_pop <- make_plan(richness = 1, carbon = 1, ncp = 1, population = 1)
+
+# people inside (millions) and % of Europe's population
+people_pop <- global(plan_pop * grid[["population"]], "sum", na.rm = TRUE)[[1]] / 1000
+100 * people_pop * 1000 / total_pop
+
+# share of each layer held, to compare with Plan 4
+sapply(c("richness", "carbon", "ncp"), \(l) share_held(plan_pop, l))
+sapply(c("richness", "carbon", "ncp"), \(l) share_held(plans[["4. all three"]], l))
+
+# how many cells differ from Plan 4, and a map
+global(abs(plan_pop - plans[["4. all three"]]), "sum", na.rm = TRUE)[[1]]
+plot(plan_pop, col = c("grey90", "darkgreen"), main = "With population")
+```
+
+```{r}
+compare <- tibble::tibble(
+  plan          = c("4. all three", "5. + population"),
+  people_m      = c(global(plans[["4. all three"]] * grid[["population"]], "sum", na.rm = TRUE)[[1]],
+                    global(plan_pop * grid[["population"]], "sum", na.rm = TRUE)[[1]]) / 1000,
+  pct_people    = 100 * people_m * 1000 / total_pop,
+  pct_richness  = 100 * c(share_held(plans[["4. all three"]], "richness"), share_held(plan_pop, "richness")),
+  pct_carbon    = 100 * c(share_held(plans[["4. all three"]], "carbon"),   share_held(plan_pop, "carbon")),
+  pct_ncp       = 100 * c(share_held(plans[["4. all three"]], "ncp"),      share_held(plan_pop, "ncp"))
+)
+
+compare |> mutate(across(-plan, ~ round(.x, 1)))
+```
 :::
 
 # Exercise: which countries?
