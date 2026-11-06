@@ -389,7 +389,7 @@ carbon_01 <- stretch(grid[["carbon"]], minv = 0, maxv = 1)
 
 # THE PROBLEM (nothing is solved yet; this only describes it)
 p_carbon <- problem(uniform_cost, features = carbon_01) |>      # cells to choose from + what to protect
-  add_max_wtd_sum_objective(budget = budget_cells) |>   # maximise the summed feature value, within the budget
+  add_max_utility_objective(budget = budget_cells) |>   # maximise the summed feature value, within the budget
   add_binary_decisions() |>                             # each cell is protected (1) or not (0), never partly
   add_highs_solver(gap = 0, verbose = FALSE)          # gap = 0: demand the exact best answer, not "within 10%"
 
@@ -403,6 +403,12 @@ plot(sol_carbon, col = c("grey90", "darkgreen"), main = "Carbon alone, 30% of th
 
 Two things to check. How many cells did it protect (`global(sol_carbon, "sum", na.rm = TRUE)`), and is that 30% of the land cells? Then look at the map: does it match where the carbon layer is high?
 
+Yes the carbon layer on both maps are matching.
+
+```{r}
+global(uniform_cost, "sum", na.rm = TRUE)/global(sol_carbon, "sum", na.rm = TRUE)
+```
+
 ## richness and carbon
 
 Same thing, with a second layer. With two layers and no weights, each counts equally.
@@ -415,7 +421,7 @@ richness_01 <- stretch(grid[["richness"]], minv = 0, maxv = 1)
 # Only the features change: two layers stacked with c(). Cost, budget, objective,
 # decisions and solver are exactly as before.
 p_richness_carbon <- problem(uniform_cost, features = c(richness_01, carbon_01)) |>
-  add_max_wtd_sum_objective(budget = budget_cells) |>   # now maximises richness + carbon, each counting equally
+  add_max_utility_objective(budget = budget_cells) |>   # now maximises richness + carbon, each counting equally
   add_binary_decisions() |>
   add_default_solver(gap = 0, verbose = FALSE)
 
@@ -426,13 +432,19 @@ plot(sol_richness_carbon, col = c("grey90", "darkgreen"), main = "Richness and c
 ```
 
 ::: {.callout-note title="Stop and think"}
-Look back at the two chunks above. Which lines did you copy and paste, and which lines changed? Now imagine you also want NCP, a 10% budget, unequal weights, and a plan that locks in existing protected areas, and you want to compare a dozen of these.
+Look back at the two chunks above. Which lines did you copy and paste, and which lines changed?
 
-1.  What are the things that vary between plans? Those are the arguments.
-2.  What stays the same? That is the body.
-3.  What would go wrong if you kept copying and pasting (and fixed a bug in only one copy)?
+What stayed the same is the general way to define the problem, the objective function, the decisions and the solver. What changed is the spefic figure that are optimized.
+
+Now imagine you also want NCP, a 10% budget, unequal weights, and a plan that locks in existing protected areas, and you want to compare a dozen of these.
+
+1.  What are the things that vary between plans? Those are the arguments.What us changing is the weights (different values). 
+2.  What stays the same? That is the body. What stays the same is the budget, the specific layers, the lock-in exisitng protected areas, and solving the optimization. 
+3.  What would go wrong if you kept copying and pasting (and fixed a bug in only one copy)? If the is an error it would be pasted to all the next copies, makes it harder to keep it uniform. 
 
 Sketch the function you would write before you read ours below.
+
+
 :::
 
 ## Wrapping the steps in a function
