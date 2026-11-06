@@ -1194,6 +1194,127 @@ already held, and re-run your plans with those cells **locked in** (see
     tell you?
 :::
 
+# Same analysis for Africa
+
+Paste this at the **end** of the file. It reuses `fill0()`, `share_held()`, `carbon_cog`, `ncp_cog` and `population_cog` from above, and it replaces `grid` and `uniform_cost` with the Africa versions.
+
+```{r}
+#| label: africa-polygon
+sf_use_s2(FALSE)
+
+africa <- ne_countries(scale = "medium", continent = "Africa", returnclass = "sf") |>
+  st_make_valid() |>
+  st_crop(xmin = -20, xmax = 55, ymin = -36, ymax = 38)
+
+bbox_af <- st_bbox(africa)
+
+# Check that gdp_md, pop_est and income_grp exist in your version
+names(africa)
+
+# GDP per person in US$ (gdp_md is in million US$)
+africa$gdp_pc <- africa$gdp_md * 1e6 / africa$pop_est
+```
+
+```{r}
+#| label: africa-grid
+richness_global <- rast("data/Combined_SR_2025.tif")
+africa_proj <- vect(st_transform(africa, crs(richness_global)))
+
+richness_af <- crop(richness_global, africa_proj)
+names(richness_af) <- "richness"
+
+win <- ext(bbox_af[c("xmin", "xmax", "ymin", "ymax")])
+
+carbon_af <- project(crop(carbon_cog, win), richness_af, method = "average")
+names(carbon_af) <- "carbon"
+
+ncp_af <- project(crop(ncp_cog, win), richness_af, method = "average")
+names(ncp_af) <- "ncp"
+
+pop_af <- project(crop(population_cog, win), richness_af, method = "sum") * 16^2 / 1000
+names(pop_af) <- "population"
+
+grid <- c(richness_af, fill0(carbon_af), fill0(ncp_af), fill0(pop_af))
+grid <- mask(grid, africa_proj, touches = FALSE)
+
+uniform_cost <- ifel(is.na(grid[["richness"]]), NA, 1)
+names(uniform_cost) <- "cost"
+
+plot(grid)
+```
+
+## Development layers
+
+`dev_need` is high where GDP per person is low (0 to 1). `ncp_need` is NCP multiplied by `dev_need`, so it rewards nature's contributions where people have the fewest alternatives. Countries with no GDP value get the median.
+
+```{r}
+#| label: africa-dev
+gdp_r <- rasterize(africa_proj, grid, field = "gdp_pc")
+gdp_r <- mask(gdp_r, grid[["richness"]])
+gdp_r <- ifel(is.na(gdp_r) & !is.na(grid[["richness"]]),
+              median(africa$gdp_pc, na.rm = TRUE), gdp_r)
+
+dev_need <- stretch(-log(gdp_r), minv = 0, maxv = 1)
+names(dev_need) <- "dev_need"
+
+ncp_need <- stretch(grid[["ncp"]], minv = 0, maxv = 1) * dev_need
+names(ncp_need) <- "ncp_need"
+
+grid <- c(grid, dev_need, ncp_need)
+```
+
+## Plans
+
+`weights` is a named vector, so any layer in `grid` can be used.
+
+```{r}
+#| label: africa-plans
+make_plan2 <- function(weights, budget = 0.3, cost = uniform_cost) {
+  weights <- weights[weights > 0]
+  features <- stretch(grid[[names(weights)]], minv = 0, maxv = 1)
+
+  p <- problem(cost, features = features) |>
+    add_max_wtd_sum_objective(budget = budget * global(cost, "sum", na.rm = TRUE)[[1]]) |>
+    add_feature_weights(unname(weights)) |>
+    add_binary_decisions() |>
+    add_default_solver(gap = 0, verbose = FALSE)
+
+  solve(p, force = TRUE)
+}
+
+plans_af <- list(
+  "1. richness"          = make_plan2(c(richness = 1)),
+  "2. carbon"            = make_plan2(c(carbon = 1)),
+  "3. NCP"               = make_plan2(c(ncp = 1)),
+  "4. all three"         = make_plan2(c(richness = 1, carbon = 1, ncp = 1)),
+  "5. livelihoods"       = make_plan2(c(ncp = 1, ncp_need = 2)),
+  "6. nature + develop." = make_plan2(c(richness = 1, carbon = 1, ncp = 1, ncp_need = 1))
+)
+
+par(mfrow = c(2, 3))
+for (n in names(plans_af)) plot(plans_af[[n]], col = c("grey90", "darkgreen"), main = n, legend = FALSE)
+par(mfrow = c(1, 1))
+```
+
+## What does each plan hold, and who lives inside?
+
+```{r}
+#| label: africa-summary
+total_pop <- global(grid[["population"]], "sum", na.rm = TRUE)[[1]]
+
+summary_af <- lapply(plans_af, \(sol) {
+  tibble::tibble(
+    richness_held = share_held(sol, "richness"),
+    carbon_held   = share_held(sol, "carbon"),
+    ncp_held      = share_held(sol, "ncp"),
+    people_m      = global(sol * grid[["population"]], "sum", na.rm = TRUE)[[1]] / 1000,
+    people_share  = people_m * 1000 / total_pop
+  )
+}) |> bind_rows(.id = "plan")
+
+summary_af |> mutate(across(-plan, ~ round(.x, 2)))
+```
+
 # Going further
 
 - `add_boundary_penalties()` rewards connected plans. Run it on Plan 4
