@@ -296,7 +296,13 @@ layout(1)
 ::: {.callout-note title="Your task"}
 Stack the three layers into one `grid` (starting from `richness`, so the chunk is safe to re-run), fill the missing values, then use `mask()` with the European polygon (`europe_proj`) to set everything outside to `NA`. Plot `grid` and count the cells that remain with `global(grid[["richness"]], "notNA")`.
 
-*Think:* why mask *after* filling the zeros rather than before? And `mask()` has a `touches` argument: which setting do you want for a coastline?
+*Think:* why mask *after* filling the zeros rather than before?
+
+To avoid removing cells that should represent 0 values.
+
+And `mask()` has a `touches` argument: which setting do you want for a coastline?
+
+FALSE to avoid including cells that have some areas that are actually ocean.\
 :::
 
 ```{r}
@@ -393,7 +399,7 @@ carbon_01 <- stretch(grid[["carbon"]], minv = 0, maxv = 1)
 
 # THE PROBLEM (nothing is solved yet; this only describes it)
 p_carbon <- problem(uniform_cost, features = carbon_01) |>      # cells to choose from + what to protect
-  add_max_wtd_sum_objective(budget = budget_cells) |>   # maximise the summed feature value, within the budget
+  add_max_utility_objective(budget = budget_cells) |>   # maximise the summed feature value, within the budget
   add_binary_decisions() |>                             # each cell is protected (1) or not (0), never partly
   add_highs_solver(gap = 0, verbose = FALSE)          # gap = 0: demand the exact best answer, not "within 10%"
 
@@ -408,6 +414,12 @@ grid <- rast("cache/europe_grid.tif")
 
 Two things to check. How many cells did it protect (`global(sol_carbon, "sum", na.rm = TRUE)`), and is that 30% of the land cells? Then look at the map: does it match where the carbon layer is high?
 
+Yes the carbon layer on both maps are matching.
+
+```{r}
+global(uniform_cost, "sum", na.rm = TRUE)/global(sol_carbon, "sum", na.rm = TRUE)
+```
+
 ## richness and carbon
 
 Same thing, with a second layer. With two layers and no weights, each counts equally.
@@ -420,7 +432,7 @@ richness_01 <- stretch(grid[["richness"]], minv = 0, maxv = 1)
 # Only the features change: two layers stacked with c(). Cost, budget, objective,
 # decisions and solver are exactly as before.
 p_richness_carbon <- problem(uniform_cost, features = c(richness_01, carbon_01)) |>
-  add_max_wtd_sum_objective(budget = budget_cells) |>   # now maximises richness + carbon, each counting equally
+  add_max_utility_objective(budget = budget_cells) |>   # now maximises richness + carbon, each counting equally
   add_binary_decisions() |>
   add_default_solver(gap = 0, verbose = FALSE)
 
@@ -431,13 +443,42 @@ plot(sol_richness_carbon, col = c("grey90", "darkgreen"), main = "Richness and c
 ```
 
 ::: {.callout-note title="Stop and think"}
-Look back at the two chunks above. Which lines did you copy and paste, and which lines changed? Now imagine you also want NCP, a 10% budget, unequal weights, and a plan that locks in existing protected areas, and you want to compare a dozen of these.
+Look back at the two chunks above. Which lines did you copy and paste, and which lines changed?
 
-1.  What are the things that vary between plans? Those are the arguments.
-2.  What stays the same? That is the body.
-3.  What would go wrong if you kept copying and pasting (and fixed a bug in only one copy)?
+What stayed the same is the general way to define the problem, the objective function, the decisions and the solver. What changed is the spefic figure that are optimized.
 
-Sketch the function you would write before you read ours below.
+Now imagine you also want NCP, a 10% budget, unequal weights, and a plan that locks in existing protected areas, and you want to compare a dozen of these.
+
+1.  What are the things that vary between plans? Those are the arguments.What us changing is the weights and layers (different values).
+2.  What stays the same? That is the body. What stays the same is the budget, the lock-in exisitng protected areas, and solving the optimization.
+3.  What would go wrong if you kept copying and pasting (and fixed a bug in only one copy)? If the is an error it would be pasted to all the next copies, makes it harder to keep it uniform.
+
+Sketch the function you would write before you read ours below.\
+\
+Budget would be 0.1 (new budget) and locked_in = existing areas to lock in protected areas.
+
+```         
+make_plan <- function(richness = 0, carbon = 0, ncp = 0, budget = 0.1, locked_in = existing_pa) {
+  # 1. Filter to only active feature weights (> 0)
+  weights <- c(richness = richness, carbon = carbon, ncp = ncp)
+  weights <- weights[weights > 0]
+  
+  # 2. Extract and rescale active layers to 0-1
+  features <- stretch(grid[[names(weights)]], minv = 0, maxv = 1)
+  
+  # 3. Build the prioritizr problem
+  p <- problem(uniform_cost, features = features) |>
+    add_max_wtd_sum_objective(budget = budget * global(uniform_cost, "sum", na.rm = TRUE)[[1]]) |>
+    add_feature_weights(unname(weights)) |>
+    add_binary_decisions() |>
+    add_default_solver(gap = 0, verbose = FALSE)
+  
+  # 4. Add locked-in areas if provided, then solve
+  if (!is.null(locked_in)) p <- add_locked_in_constraints(p, locked_in)
+  
+  solve(p, force = TRUE)
+}
+```
 :::
 
 ## Wrapping the steps in a function
@@ -446,7 +487,10 @@ One answer: the layers and weights are the arguments, the budget and cost have d
 
 ```{r}
 #| label: make-plan
-# Weights say how much each layer counts; layers are rescaled to 0-1; the budget is a share of total cost.
+# Weights say how much each layer counts; layers are rescaled to 0-1; the budget is a share of total cost. 
+
+#QUESTION?  shouldnt budget be 0.1 and locked_in NOT null?
+
 make_problem <- function(richness = 0, carbon = 0, ncp = 0, population = 0,
                          budget = 0.3, cost = uniform_cost, locked_in = NULL) {
   weights <- c(richness = richness, carbon = carbon, ncp = ncp, population = population)
@@ -504,7 +548,12 @@ plans |>
   theme_void()
 ```
 
-Switzerland is outlined in red. Compare Plans 1 to 3: where do they agree, and where do they pull apart?
+Switzerland is outlined in red. Compare Plans 1 to 3: where do they agree, and where do they pull apart?\
+1. almost no protected areas in CH
+
+2.  some protected areas
+3.  almost all is protected
+4.  almost all is protected. It seems to match more with the NCP map even though the layers are weighted equally.
 
 ## What does each plan hold?
 
