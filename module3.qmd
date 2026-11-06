@@ -61,7 +61,7 @@ setGDALconfig(c("GDAL_HTTP_TIMEOUT=60", "GDAL_HTTP_MAX_RETRY=3", "GDAL_HTTP_RETR
 The layers:
 
 | Layer | What it is | Where it lives |
-|------------------------|------------------------|------------------------|
+|----|----|----|
 | `richness` | Combined IUCN species richness, 10 km, World Mollweide | local file in `data/` |
 | `carbon` | Irrecoverable carbon (Noon et al. 2022) | cloud-optimised GeoTIFF, lon/lat |
 | `ncp` | Number of nature's contributions to people a place ranks highly for, 0-19 (Chaplin-Kramer et al. 2019) | cloud-optimised GeoTIFF, lon/lat |
@@ -461,7 +461,7 @@ more than 30% of the land.* In code that sentence has five parts, and
 each one is a line (or two) below:
 
 | Part | Question it answers | In the code below |
-|------------------------|------------------------|------------------------|
+|----|----|----|
 | Planning units and cost | What can we choose from, and what does each cell cost? | `problem(uniform_cost, ...)`: every non-`NA` cell is a planning unit |
 | Features | What do we want to protect? | `features = carbon_01` |
 | Objective | What do we maximise, and under what budget? | `add_max_wtd_sum_objective(budget = budget_cells)` |
