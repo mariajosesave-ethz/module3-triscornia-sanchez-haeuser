@@ -1196,8 +1196,6 @@ already held, and re-run your plans with those cells **locked in** (see
 
 # Same analysis for Africa
 
-Paste this at the **end** of the file. It reuses `fill0()`, `share_held()`, `carbon_cog`, `ncp_cog` and `population_cog` from above, and it replaces `grid` and `uniform_cost` with the Africa versions.
-
 ```{r}
 #| label: africa-polygon
 sf_use_s2(FALSE)
@@ -1245,7 +1243,10 @@ plot(grid)
 
 ## Development layers
 
-`dev_need` is high where GDP per person is low (0 to 1). `ncp_need` is NCP multiplied by `dev_need`, so it rewards nature's contributions where people have the fewest alternatives. Countries with no GDP value get the median.
+`dev_need` is high where GDP per person is low (0 to 1). `ncp_need` is
+NCP multiplied by `dev_need`, so it rewards nature's contributions where
+people have the fewest alternatives. Countries with no GDP value get the
+median.
 
 ```{r}
 #| label: africa-dev
