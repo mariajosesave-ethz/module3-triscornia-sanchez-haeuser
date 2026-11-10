@@ -61,7 +61,7 @@ setGDALconfig(c("GDAL_HTTP_TIMEOUT=60", "GDAL_HTTP_MAX_RETRY=3", "GDAL_HTTP_RETR
 The layers:
 
 | Layer | What it is | Where it lives |
-|----|----|----|
+|------------------------|------------------------|------------------------|
 | `richness` | Combined IUCN species richness, 10 km, World Mollweide | local file in `data/` |
 | `carbon` | Irrecoverable carbon (Noon et al. 2022) | cloud-optimised GeoTIFF, lon/lat |
 | `ncp` | Number of nature's contributions to people a place ranks highly for, 0-19 (Chaplin-Kramer et al. 2019) | cloud-optimised GeoTIFF, lon/lat |
@@ -461,7 +461,7 @@ more than 30% of the land.* In code that sentence has five parts, and
 each one is a line (or two) below:
 
 | Part | Question it answers | In the code below |
-|----|----|----|
+|------------------------|------------------------|------------------------|
 | Planning units and cost | What can we choose from, and what does each cell cost? | `problem(uniform_cost, ...)`: every non-`NA` cell is a planning unit |
 | Features | What do we want to protect? | `features = carbon_01` |
 | Objective | What do we maximise, and under what budget? | `add_max_wtd_sum_objective(budget = budget_cells)` |
@@ -1206,19 +1206,18 @@ africa <- ne_countries(scale = "medium", continent = "Africa", returnclass = "sf
 
 bbox_af <- st_bbox(africa)
 
-# Check that gdp_md, pop_est and income_grp exist in your version
-names(africa)
-
-# GDP per person in US$ (gdp_md is in million US$)
-africa$gdp_pc <- africa$gdp_md * 1e6 / africa$pop_est
+africa_proj <- vect(
+  st_transform(africa, crs(richness_global))
+)
 ```
 
 ```{r}
-#| label: africa-grid
+#| label: africa-layers
 richness_global <- rast("data/Combined_SR_2025.tif")
 africa_proj <- vect(st_transform(africa, crs(richness_global)))
 
 richness_af <- crop(richness_global, africa_proj)
+richness_af <- aggregate(richness_af, 3, fun = "mean", na.rm = TRUE) #make coarser so it doesnt crash
 names(richness_af) <- "richness"
 
 win <- ext(bbox_af[c("xmin", "xmax", "ymin", "ymax")])
@@ -1232,84 +1231,157 @@ names(ncp_af) <- "ncp"
 pop_af <- project(crop(population_cog, win), richness_af, method = "sum") * 16^2 / 1000
 names(pop_af) <- "population"
 
-grid <- c(richness_af, fill0(carbon_af), fill0(ncp_af), fill0(pop_af))
-grid <- mask(grid, africa_proj, touches = FALSE)
+grid_af <- c(
+  richness_af,
+  fill0(carbon_af),
+  fill0(ncp_af),
+  fill0(pop_af)          # changed: fill missing population with 0, as in Europe
+)
 
-uniform_cost <- ifel(is.na(grid[["richness"]]), NA, 1)
-names(uniform_cost) <- "cost"
+grid_af <- mask(grid_af, africa_proj, touches = FALSE)
 
-plot(grid)
+uniform_cost_af <- ifel(is.na(grid_af[["richness"]]), NA, 1)
+names(uniform_cost_af) <- "cost"
+
+plot_capped <- function(r, p = 0.99, main = names(r)) {
+  top <- global(r, \(x) quantile(x, p, na.rm = TRUE))[[1]]
+  plot(clamp(r, upper = top, values = TRUE), range = c(0, top * 1.001))
+}
+
+
+par(mfrow = c(2, 2))
+for (l in names(grid_af)) plot_capped(grid_af[[l]], main = l)
+par(mfrow = c(1, 1))
+```
+```{r}
+#| label: africa-save-grid
+dir.create("cache", showWarnings = FALSE)
+writeRaster(grid_af, "cache/africa_grid.tif", overwrite = TRUE)
+
 ```
 
-## Development layers
-
-`dev_need` is high where GDP per person is low (0 to 1). `ncp_need` is
-NCP multiplied by `dev_need`, so it rewards nature's contributions where
-people have the fewest alternatives. Countries with no GDP value get the
-median.
-
 ```{r}
-#| label: africa-dev
-gdp_r <- rasterize(africa_proj, grid, field = "gdp_pc")
-gdp_r <- mask(gdp_r, grid[["richness"]])
-gdp_r <- ifel(is.na(gdp_r) & !is.na(grid[["richness"]]),
-              median(africa$gdp_pc, na.rm = TRUE), gdp_r)
 
-dev_need <- stretch(-log(gdp_r), minv = 0, maxv = 1)
-names(dev_need) <- "dev_need"
+na_map <- function(layers, poly, label) {
+  na_r <- mask(is.na(layers), poly, touches = FALSE)   # 1 = missing on land
 
-ncp_need <- stretch(grid[["ncp"]], minv = 0, maxv = 1) * dev_need
-names(ncp_need) <- "ncp_need"
+  par(mfrow = c(1, nlyr(na_r)))
+  for (i in seq_len(nlyr(na_r))) {
+    plot(na_r[[i]], col = c("grey90", "red"), legend = FALSE,
+         main = paste(label, names(na_r)[i], "NA"))
+  }
+  par(mfrow = c(1, 1))
 
-grid <- c(grid, dev_need, ncp_need)
+  # all cells inside the polygon, whether or not richness has data there
+  land <- global(mask(is.na(layers[[1]]) * 0 + 1, poly, touches = FALSE),
+                 "sum", na.rm = TRUE)[[1]]
+
+  tibble::tibble(
+    layer    = names(na_r),
+    na_cells = global(na_r, "sum", na.rm = TRUE)[[1]],
+    share_land = na_cells / land
+  )
+}
+
+na_map(c(richness_af, carbon_af, ncp_af), africa_proj, "Africa")
+na_map(c(richness, carbon, ncp), europe_proj, "Europe")
+
+
 ```
 
 ## Plans
-
-`weights` is a named vector, so any layer in `grid` can be used.
-
 ```{r}
-#| label: africa-plans
-make_plan2 <- function(weights, budget = 0.3, cost = uniform_cost) {
-  weights <- weights[weights > 0]
-  features <- stretch(grid[[names(weights)]], minv = 0, maxv = 1)
+#| label: africa-make-plan
+make_plan_af <- function(weights, budget = 0.3, cost = uniform_cost_af,
+                         gap = 0.01, time_limit = 600, verbose = TRUE) {
+  weights  <- weights[weights > 0]
+  features <- stretch(grid_af[[names(weights)]], minv = 0, maxv = 1)
 
   p <- problem(cost, features = features) |>
     add_max_wtd_sum_objective(budget = budget * global(cost, "sum", na.rm = TRUE)[[1]]) |>
     add_feature_weights(unname(weights)) |>
     add_binary_decisions() |>
-    add_default_solver(gap = 0, verbose = FALSE)
+    add_default_solver(gap = gap, time_limit = time_limit, verbose = verbose)
 
   solve(p, force = TRUE)
 }
+```
 
-plans_af <- list(
-  "1. richness"          = make_plan2(c(richness = 1)),
-  "2. carbon"            = make_plan2(c(carbon = 1)),
-  "3. NCP"               = make_plan2(c(ncp = 1)),
-  "4. all three"         = make_plan2(c(richness = 1, carbon = 1, ncp = 1)),
-  "5. livelihoods"       = make_plan2(c(ncp = 1, ncp_need = 2)),
-  "6. nature + develop." = make_plan2(c(richness = 1, carbon = 1, ncp = 1, ncp_need = 1))
-)
+```{r}
+#| label: africa-plans-1-3
+t1 <- system.time(plan_rich_af   <- make_plan_af(c(richness = 1)))
+t2 <- system.time(plan_carbon_af <- make_plan_af(c(carbon = 1)))
+t3 <- system.time(plan_ncp_af    <- make_plan_af(c(ncp = 1)))
 
-par(mfrow = c(2, 3))
-for (n in names(plans_af)) plot(plans_af[[n]], col = c("grey90", "darkgreen"), main = n, legend = FALSE)
+rbind(richness = t1, carbon = t2, ncp = t3)[, "elapsed"]
+
+writeRaster(plan_rich_af,   "cache/af_plan1_richness.tif", overwrite = TRUE)
+writeRaster(plan_carbon_af, "cache/af_plan2_carbon.tif",    overwrite = TRUE)
+writeRaster(plan_ncp_af,    "cache/af_plan3_ncp.tif",       overwrite = TRUE)
+
+par(mfrow = c(1, 3))
+plot(plan_rich_af,   col = c("grey90", "darkgreen"), main = "1. richness", legend = FALSE)
+plot(plan_carbon_af, col = c("grey90", "darkgreen"), main = "2. carbon",   legend = FALSE)
+plot(plan_ncp_af,    col = c("grey90", "darkgreen"), main = "3. NCP",      legend = FALSE)
 par(mfrow = c(1, 1))
 ```
 
-## What does each plan hold, and who lives inside?
+```{r}
+#| label: africa-plan-4
+t4 <- system.time(
+  plan_all_af <- make_plan_af(c(richness = 1, carbon = 1, ncp = 1),
+                              gap = 0.01, time_limit = 600, verbose = TRUE)
+)
+t4[["elapsed"]]
+
+writeRaster(plan_all_af, "cache/af_plan4_all.tif", overwrite = TRUE)
+
+plot(plan_all_af, col = c("grey90", "darkgreen"), main = "4. all three", legend = FALSE)
+```
+
+```{r}
+#| label: africa-plans-list
+plans_af <- list(
+  "1. richness"  = plan_rich_af,
+  "2. carbon"    = plan_carbon_af,
+  "3. NCP"       = plan_ncp_af,
+  "4. all three" = plan_all_af
+)
+
+# sanity check: each plan should protect 30% of the land cells
+sapply(plans_af, \(s) global(s, "sum", na.rm = TRUE)[[1]]) /
+  global(uniform_cost_af, "sum", na.rm = TRUE)[[1]]
+
+par(mfrow = c(2, 2))
+for (n in names(plans_af)) {
+  plot(plans_af[[n]], col = c("grey90", "darkgreen"), main = n, legend = FALSE)
+}
+par(mfrow = c(1, 1))
+```
+
+## People
 
 ```{r}
 #| label: africa-summary
-total_pop <- global(grid[["population"]], "sum", na.rm = TRUE)[[1]]
+
+share_held_af <- function(sol, layer) {
+  global(sol * grid_af[[layer]], "sum", na.rm = TRUE)[[1]] /
+    global(grid_af[[layer]], "sum", na.rm = TRUE)[[1]]
+}
+
+total_pop_af <- global(grid_af[["population"]], "sum", na.rm = TRUE)[[1]]
 
 summary_af <- lapply(plans_af, \(sol) {
   tibble::tibble(
-    richness_held = share_held(sol, "richness"),
-    carbon_held   = share_held(sol, "carbon"),
-    ncp_held      = share_held(sol, "ncp"),
-    people_m      = global(sol * grid[["population"]], "sum", na.rm = TRUE)[[1]] / 1000,
-    people_share  = people_m * 1000 / total_pop
+    richness_held = share_held_af(sol, "richness"),
+    carbon_held   = share_held_af(sol, "carbon"),
+    ncp_held      = share_held_af(sol, "ncp"),
+    people_m      = global(
+      sol * grid_af[["population"]],
+      "sum",
+      na.rm = TRUE
+    )[[1]] / 1000,
+    people_share  = people_m * 1000 / total_pop_af
   )
 }) |> bind_rows(.id = "plan")
 
